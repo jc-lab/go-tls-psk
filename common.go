@@ -723,6 +723,9 @@ type Config struct {
 	// used for debugging.
 	KeyLogWriter io.Writer
 
+	// Extra is used to hold extra configuration for external cipher-suites
+	Extra interface{}
+
 	// mutex protects sessionTicketKeys and autoSessionTicketKeys.
 	mutex sync.RWMutex
 	// sessionTicketKeys contains zero or more ticket keys. If set, it means the

@@ -824,7 +824,7 @@ func TestCloneNonFuncFields(t *testing.T) {
 			f.Set(reflect.ValueOf([]CurveID{CurveP256}))
 		case "Renegotiation":
 			f.Set(reflect.ValueOf(RenegotiateOnceAsClient))
-		case "mutex", "autoSessionTicketKeys", "sessionTicketKeys":
+		case "Extra", "mutex", "autoSessionTicketKeys", "sessionTicketKeys":
 			continue // these are unexported fields that are handled separately
 		default:
 			t.Errorf("all fields must be accounted for, but saw unknown field %q", fn)

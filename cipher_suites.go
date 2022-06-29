@@ -13,6 +13,7 @@ import (
 	"crypto/rc4"
 	"crypto/sha1"
 	"crypto/sha256"
+	"crypto/sha512"
 	"fmt"
 	"golang.org/x/crypto/chacha20poly1305"
 	"hash"
@@ -65,6 +66,10 @@ func CipherSuites() []*CipherSuite {
 		{TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384, "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384", supportedOnlyTLS12, false},
 		{TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256", supportedOnlyTLS12, false},
 		{TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384, "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384", supportedOnlyTLS12, false},
+		{TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA, "TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA", supportedOnlyTLS12, false},
+		{TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA256, "TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA256", supportedOnlyTLS12, false},
+		{TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA, "TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA", supportedOnlyTLS12, false},
+		{TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA384, "TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA384", supportedOnlyTLS12, false},
 		{TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256, "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256", supportedOnlyTLS12, false},
 		{TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256, "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256", supportedOnlyTLS12, false},
 	}
@@ -124,6 +129,9 @@ const (
 	// suiteSHA384 indicates that the cipher suite uses SHA384 as the
 	// handshake hash.
 	suiteSHA384
+	// suiteNoCerts indicates that the cipher suite doesn't use certificate exchange
+	// (anonymous ciphersuites or pre-shared-secret)
+	suiteNoCerts
 )
 
 // A cipherSuite is a TLS 1.0–1.2 cipher suite, and defines the key exchange
@@ -165,6 +173,11 @@ var cipherSuites = []*cipherSuite{ // TODO: replace with a map, since the order 
 	{TLS_RSA_WITH_RC4_128_SHA, 16, 20, 0, rsaKA, 0, cipherRC4, macSHA1, nil},
 	{TLS_ECDHE_RSA_WITH_RC4_128_SHA, 16, 20, 0, ecdheRSAKA, suiteECDHE, cipherRC4, macSHA1, nil},
 	{TLS_ECDHE_ECDSA_WITH_RC4_128_SHA, 16, 20, 0, ecdheECDSAKA, suiteECDHE | suiteECSign, cipherRC4, macSHA1, nil},
+
+	{TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA, 16, 20, 16, ecdhePSKKA, suiteECDHE | suiteTLS12 | suiteNoCerts, cipherAES, macSHA1, nil},
+	{TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA256, 16, 32, 16, ecdhePSKKA, suiteECDHE | suiteTLS12 | suiteNoCerts, cipherAES, macSHA256, nil},
+	{TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA, 32, 20, 16, ecdhePSKKA, suiteECDHE | suiteTLS12 | suiteNoCerts, cipherAES, macSHA1, nil},
+	{TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA384, 32, 48, 16, ecdhePSKKA, suiteECDHE | suiteTLS12 | suiteNoCerts, cipherAES, macSHA384, nil},
 }
 
 // selectCipherSuite returns the first TLS 1.0–1.2 cipher suite from ids which
@@ -294,6 +307,10 @@ var cipherSuitesPreferenceOrder = []uint16{
 	// RC4
 	TLS_ECDHE_ECDSA_WITH_RC4_128_SHA, TLS_ECDHE_RSA_WITH_RC4_128_SHA,
 	TLS_RSA_WITH_RC4_128_SHA,
+
+	// PSK
+	TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA384, TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA,
+	TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA256, TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA,
 }
 
 var cipherSuitesPreferenceOrderNoAES = []uint16{
@@ -317,6 +334,10 @@ var cipherSuitesPreferenceOrderNoAES = []uint16{
 	TLS_RSA_WITH_AES_128_CBC_SHA256,
 	TLS_ECDHE_ECDSA_WITH_RC4_128_SHA, TLS_ECDHE_RSA_WITH_RC4_128_SHA,
 	TLS_RSA_WITH_RC4_128_SHA,
+
+	// PSK
+	TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA384, TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA,
+	TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA256, TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA,
 }
 
 // disabledCipherSuites are not used unless explicitly listed in
@@ -418,6 +439,11 @@ func macSHA1(key []byte) hash.Hash {
 // is currently only used in disabled-by-default cipher suites.
 func macSHA256(key []byte) hash.Hash {
 	return hmac.New(sha256.New, key)
+}
+
+// macSHA384 returns a SHA-384 based MAC.
+func macSHA384(key []byte) hash.Hash {
+	return hmac.New(sha512.New384, key)
 }
 
 type aead interface {
@@ -595,6 +621,12 @@ func ecdheRSAKA(version uint16) keyAgreement {
 	}
 }
 
+func ecdhePSKKA(version uint16) keyAgreement {
+	return &ecdhePskKeyAgreement{
+		version: version,
+	}
+}
+
 // mutualCipherSuite returns a cipherSuite given a list of supported
 // ciphersuites and the id requested by the peer.
 func mutualCipherSuite(have []uint16, want uint16) *cipherSuite {
@@ -659,6 +691,10 @@ const (
 	TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256       uint16 = 0xc02b
 	TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384         uint16 = 0xc030
 	TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384       uint16 = 0xc02c
+	TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA            uint16 = 0xc035
+	TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA            uint16 = 0xc036
+	TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA256         uint16 = 0xc037
+	TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA384         uint16 = 0xc038
 	TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256   uint16 = 0xcca8
 	TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256 uint16 = 0xcca9
 
