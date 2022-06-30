@@ -485,14 +485,12 @@ func (ka *ecdhePskKeyAgreement) processServerKeyExchange(config *Config, clientH
 		return errServerKeyExchange
 	}
 	pskIdentityFromServerLen := int(key[0])<<8 | int(key[1])
-	if pskIdentityFromServerLen > 0 {
-		if len(key) < (pskIdentityFromServerLen + 2) {
-			return errServerKeyExchange
-		}
-		pskIdentityFromServer := string(key[2 : 2+pskIdentityFromServerLen])
-		key = key[2+pskIdentityFromServerLen:]
-		_ = pskIdentityFromServer
+	if len(key) < (pskIdentityFromServerLen + 2) {
+		return errServerKeyExchange
 	}
+	pskIdentityFromServer := string(key[2 : 2+pskIdentityFromServerLen])
+	key = key[2:]
+	_ = pskIdentityFromServer
 
 	pskIdentity := pskConfig.GetIdentity()
 	bPskIdentity := []byte(pskIdentity)
